@@ -31,11 +31,17 @@ class FinancialDataLoader:
         """
         Load financial data for all symbols using YFinance and save to data/raw.
         
+        This method fetches OHLCV (Open, High, Low, Close, Volume) data from Yahoo Finance
+        for each symbol and automatically saves it as CSV files for future reference.
+        Implements robust error handling for network issues and missing data.
+        
         Returns:
             Dict[str, pd.DataFrame]: Dictionary with symbol as key and DataFrame as value
+                                   Each DataFrame contains columns: Open, High, Low, Close, Volume
             
         Raises:
             ValueError: If no data is successfully loaded for any symbol
+            ImportError: If yfinance package is not installed
         """
         print(f"Loading financial data for {len(self.symbols)} symbols...")
         
@@ -52,29 +58,61 @@ class FinancialDataLoader:
         
         for symbol in self.symbols:
             try:
+                # Create yfinance ticker object for the symbol
                 ticker = yf.Ticker(symbol)
-                data = ticker.history(period=self.period)
                 
+                # Fetch historical data with retry logic for network issues
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        data = ticker.history(period=self.period)
+                        break
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            raise e
+                        print(f"Retry {attempt + 1} for {symbol}: {str(e)}")
+                
+                # Edge case: Handle empty data response
                 if data.empty:
-                    print(f"Warning: No data found for {symbol}")
+                    print(f"Warning: No data found for {symbol} (delisted/invalid symbol?)")
                     continue
                 
-                # Validate required columns
+                # Edge case: Handle insufficient data (less than 10 records)
+                if len(data) < 10:
+                    print(f"Warning: Insufficient data for {symbol} ({len(data)} records)")
+                    continue
+                
+                # Validate required columns exist
                 required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
                 if not all(col in data.columns for col in required_cols):
                     print(f"Warning: Missing required columns for {symbol}")
                     continue
                 
-                # Save raw data to CSV
+                # Edge case: Check for extreme values that might indicate data errors
+                close_prices = data['Close']
+                if close_prices.max() / close_prices.min() > 1000:  # 1000x price change
+                    print(f"Warning: Extreme price variation detected for {symbol}")
+                
+                # Save raw data to CSV with error handling
                 csv_path = os.path.join(raw_data_dir, f"{symbol}_{self.period}.csv")
-                data.to_csv(csv_path)
-                print(f"✓ Saved {symbol} data to {csv_path}")
+                try:
+                    data.to_csv(csv_path)
+                    print(f"✓ Saved {symbol} data to {csv_path}")
+                except Exception as e:
+                    print(f"Warning: Could not save {symbol} data: {str(e)}")
                 
                 self.raw_data[symbol] = data
                 print(f"✓ Loaded {len(data)} records for {symbol}")
                 
             except Exception as e:
-                print(f"Error loading {symbol}: {str(e)}")
+                # Handle specific error types for better debugging
+                if "404" in str(e) or "Invalid" in str(e):
+                    print(f"Error: Symbol {symbol} not found or invalid")
+                elif "timeout" in str(e).lower():
+                    print(f"Error: Network timeout for {symbol}")
+                else:
+                    print(f"Error loading {symbol}: {str(e)}")
+                continue
         
         if not self.raw_data:
             raise ValueError("No data successfully loaded for any symbol")
