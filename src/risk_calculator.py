@@ -29,38 +29,74 @@ class RiskCalculator:
         """
         Calculate Value at Risk (VaR) using multiple methods.
         
+        VaR represents the maximum expected loss over a specific time period at a given
+        confidence level. This implementation uses three approaches:
+        1. Historical VaR: Uses empirical distribution of returns
+        2. Parametric VaR: Assumes normal distribution of returns
+        3. Modified VaR: Uses Cornish-Fisher expansion for non-normal distributions
+        
         Args:
             returns_data (Dict[str, pd.Series]): Daily returns for each symbol
-            confidence_level (float): Confidence level for VaR (default: 5%)
+            confidence_level (float): Confidence level for VaR (default: 5% = 95% confidence)
             
         Returns:
-            Dict[str, Dict]: VaR calculations for each symbol
+            Dict[str, Dict]: VaR calculations for each symbol containing:
+                - historical_var: Empirical quantile-based VaR
+                - parametric_var: Normal distribution assumption VaR
+                - modified_var: Cornish-Fisher adjusted VaR for skewness/kurtosis
+                - confidence_level: The confidence level used
+        
+        Note:
+            VaR values are negative, representing potential losses
         """
         print(f"Calculating VaR at {(1-confidence_level)*100}% confidence level...")
         
         var_results = {}
         
         for symbol, returns in returns_data.items():
-            # Historical VaR (empirical quantile)
+            # Edge case: Check for sufficient data points
+            if len(returns) < 30:
+                print(f"Warning: Insufficient data for reliable VaR calculation for {symbol}")
+                continue
+            
+            # Edge case: Handle extreme market conditions (high volatility periods)
+            volatility = returns.std()
+            if volatility > 0.1:  # Daily volatility > 10%
+                print(f"Warning: High volatility detected for {symbol} ({volatility*100:.1f}%)")
+            
+            # Historical VaR (empirical quantile) - most robust method
             var_historical = np.percentile(returns, confidence_level * 100)
             
             # Parametric VaR (assuming normal distribution)
+            # Note: This assumes returns follow normal distribution, which may not hold during crises
             mean_return = returns.mean()
             std_return = returns.std()
-            var_parametric = mean_return - stats.norm.ppf(1 - confidence_level) * std_return
             
-            # Modified VaR (Cornish-Fisher expansion for non-normal distributions)
-            skewness = returns.skew()
-            kurtosis = returns.kurtosis()
-            z_score = stats.norm.ppf(1 - confidence_level)
-            
-            # Cornish-Fisher adjustment
-            cf_adjustment = (z_score + 
-                           (z_score**2 - 1) * skewness / 6 + 
-                           (z_score**3 - 3*z_score) * kurtosis / 24 - 
-                           (2*z_score**3 - 5*z_score) * skewness**2 / 36)
-            
-            var_modified = mean_return - cf_adjustment * std_return
+            # Edge case: Handle zero or negative standard deviation
+            if std_return <= 0:
+                print(f"Warning: Zero/negative volatility for {symbol}, using historical VaR only")
+                var_parametric = var_historical
+                var_modified = var_historical
+            else:
+                var_parametric = mean_return - stats.norm.ppf(1 - confidence_level) * std_return
+                
+                # Modified VaR (Cornish-Fisher expansion for non-normal distributions)
+                # Accounts for skewness (asymmetry) and kurtosis (fat tails)
+                skewness = returns.skew()
+                kurtosis = returns.kurtosis()
+                z_score = stats.norm.ppf(1 - confidence_level)
+                
+                # Edge case: Handle extreme skewness/kurtosis values
+                if abs(skewness) > 5 or abs(kurtosis) > 10:
+                    print(f"Warning: Extreme distribution shape for {symbol} (skew: {skewness:.2f}, kurt: {kurtosis:.2f})")
+                
+                # Cornish-Fisher adjustment for higher moments
+                cf_adjustment = (z_score + 
+                               (z_score**2 - 1) * skewness / 6 + 
+                               (z_score**3 - 3*z_score) * kurtosis / 24 - 
+                               (2*z_score**3 - 5*z_score) * skewness**2 / 36)
+                
+                var_modified = mean_return - cf_adjustment * std_return
             
             var_results[symbol] = {
                 'historical_var': var_historical,
@@ -72,6 +108,10 @@ class RiskCalculator:
             print(f"✓ {symbol} VaR calculated:")
             print(f"  Historical: {var_historical:.4f} ({var_historical*100:.2f}%)")
             print(f"  Parametric: {var_parametric:.4f} ({var_parametric*100:.2f}%)")
+            print(f"  Modified: {var_modified:.4f} ({var_modified*100:.2f}%)")
+            
+            # Performance note: VaR calculation is O(n log n) due to percentile calculation
+            # For large datasets, consider using approximate quantiles for better performance
         
         return var_results
     
