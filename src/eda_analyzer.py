@@ -26,9 +26,19 @@ class EDAAnalyzer:
         """
         Create comprehensive visualization plots for financial data.
         
+        Generates a 3x2 subplot layout with:
+        1. Price trends - Shows closing price evolution over time
+        2. Return trends - Daily percentage changes with volatility patterns
+        3. Return distributions - Histograms showing return frequency distributions
+        4. Rolling volatility - 30-day annualized volatility (252 trading days/year)
+        5. Box plots - Statistical summary of return distributions
+        6. Correlation heatmap - Cross-asset return correlations
+        
+        Performance optimization: Uses vectorized operations and efficient plotting
+        
         Args:
-            cleaned_data (Dict[str, pd.DataFrame]): Cleaned price data
-            returns_data (Dict[str, pd.Series]): Return data
+            cleaned_data (Dict[str, pd.DataFrame]): Cleaned price data with OHLCV columns
+            returns_data (Dict[str, pd.Series]): Daily percentage returns
         """
         print("Generating comprehensive visualizations...")
         
@@ -91,9 +101,22 @@ class EDAAnalyzer:
         ax.grid(True, alpha=0.3)
     
     def _plot_rolling_volatility(self, ax, returns_data: Dict[str, pd.Series]) -> None:
-        """Plot 30-day rolling volatility (annualized)."""
+        """Plot 30-day rolling volatility (annualized).
+        
+        Volatility calculation:
+        - Uses 30-day rolling window for smoothing
+        - Annualizes by multiplying by sqrt(252) trading days
+        - Higher values indicate more volatile periods (market stress)
+        """
         for symbol, returns in returns_data.items():
-            rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
+            # Performance optimization: Use pandas rolling for efficient calculation
+            rolling_vol = returns.rolling(window=30, min_periods=10).std() * np.sqrt(252)
+            
+            # Edge case: Handle insufficient data for rolling calculation
+            if rolling_vol.dropna().empty:
+                print(f"Warning: Insufficient data for volatility calculation for {symbol}")
+                continue
+                
             ax.plot(rolling_vol.index, rolling_vol, label=f'{symbol}', linewidth=1.2)
         
         ax.set_title('Rolling Volatility (30-day, Annualized)', fontweight='bold')
@@ -112,10 +135,29 @@ class EDAAnalyzer:
         ax.grid(True, alpha=0.3)
     
     def _plot_correlation_heatmap(self, ax, returns_data: Dict[str, pd.Series]) -> None:
-        """Plot correlation heatmap of returns."""
+        """Plot correlation heatmap of returns.
+        
+        Correlation interpretation:
+        - Values near +1: Assets move together (high positive correlation)
+        - Values near -1: Assets move opposite (negative correlation)
+        - Values near 0: No linear relationship
+        
+        Important for portfolio diversification analysis.
+        """
         if len(returns_data) > 1:
+            # Performance optimization: Use pandas built-in correlation
             returns_df = pd.DataFrame(returns_data)
-            correlation_matrix = returns_df.corr()
+            
+            # Edge case: Handle missing data in correlation calculation
+            if returns_df.isnull().any().any():
+                print("Warning: Missing data detected, using pairwise correlation")
+                correlation_matrix = returns_df.corr(method='pearson', min_periods=30)
+            else:
+                correlation_matrix = returns_df.corr()
+            
+            # Edge case: Check for valid correlations
+            if correlation_matrix.isnull().any().any():
+                print("Warning: Some correlations could not be calculated")
             
             sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', 
                        center=0, ax=ax, square=True, fmt='.3f')
