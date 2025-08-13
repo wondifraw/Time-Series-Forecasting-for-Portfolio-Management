@@ -1,0 +1,59 @@
+name: Performance Benchmark
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install memory-profiler
+    
+    - name: Run performance tests
+      run: |
+        python -c "
+        import time, sys
+        sys.path.append('scripts')
+        from main_analysis import FinancialAnalysisPipeline
+        
+        # Benchmark different dataset sizes
+        for symbols in [['AAPL'], ['AAPL', 'MSFT'], ['AAPL', 'MSFT', 'GOOGL', 'AMZN']]:
+            start = time.time()
+            p = FinancialAnalysisPipeline(symbols, '6mo')
+            p.run_quick_analysis()
+            elapsed = time.time() - start
+            print(f'{len(symbols)} symbols: {elapsed:.2f}s')
+        "
+    
+    - name: Memory profiling
+      run: |
+        mprof run --python python -c "
+        import sys; sys.path.append('scripts')
+        from main_analysis import FinancialAnalysisPipeline
+        p = FinancialAnalysisPipeline(['TSLA', 'BND', 'SPY'], '1y')
+        p.run_complete_analysis()
+        "
+        mprof plot -o memory_profile.png
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          memory_profile.png
+          mprofile_*.dat

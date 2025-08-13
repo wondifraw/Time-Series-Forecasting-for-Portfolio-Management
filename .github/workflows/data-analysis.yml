@@ -3,19 +3,30 @@ name: Data Analysis
 on:
   schedule:
     - cron: '0 9 * * 1'  # Run every Monday at 9 AM UTC
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: 'Stock symbols (comma-separated)'
+        required: false
+        default: 'TSLA,BND,SPY'
+      period:
+        description: 'Analysis period'
+        required: false
+        default: '1y'
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
+        cache: 'pip'
     
     - name: Install dependencies
       run: |
@@ -23,14 +34,30 @@ jobs:
         pip install -r requirements.txt
     
     - name: Run financial analysis
+      env:
+        SYMBOLS: ${{ github.event.inputs.symbols || 'TSLA,BND,SPY' }}
+        PERIOD: ${{ github.event.inputs.period || '1y' }}
       run: |
-        python scripts/main_analysis.py
+        python -c "
+        import sys; sys.path.append('scripts')
+        from main_analysis import FinancialAnalysisPipeline
+        symbols = '$SYMBOLS'.split(',')
+        p = FinancialAnalysisPipeline(symbols, '$PERIOD')
+        p.run_complete_analysis()
+        "
+    
+    - name: Run forecasting models
+      run: |
+        python scripts/task2_demo.py
     
     - name: Upload analysis results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
+      if: always()
       with:
-        name: analysis-results
+        name: analysis-results-${{ github.run_number }}
         path: |
           data/processed/
+          results/
           *.txt
           *.csv
+        retention-days: 30
