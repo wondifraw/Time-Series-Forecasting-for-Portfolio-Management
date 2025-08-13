@@ -15,12 +15,20 @@ Time-Series-Forecasting-for-Portfolio-Management/
 │   ├── data_preprocessor.py # Data cleaning and return calculations
 │   ├── eda_analyzer.py      # Exploratory data analysis
 │   ├── risk_calculator.py   # Risk metrics (VaR, Sharpe Ratio, Beta)
-│   └── report_generator.py  # Comprehensive reporting
+│   ├── report_generator.py  # Comprehensive reporting
+│   └── task2/               # Time series forecasting models
+│       ├── arima_model.py   # ARIMA implementation with auto-optimization
+│       ├── lstm_model.py    # LSTM neural network implementation
+│       ├── model_comparison.py # Model performance comparison
+│       └── forecasting_pipeline.py # Complete forecasting pipeline
 ├── scripts/                 # Execution scripts
-│   └── main_analysis.py     # Main pipeline orchestrator
+│   ├── main_analysis.py     # Main pipeline orchestrator
+│   └── task2_demo.py        # Task 2 forecasting demonstration
 ├── notebooks/               # Jupyter notebooks
 │   └── financial_analysis.ipynb
 ├── tests/                   # Automated tests
+├── results/                 # Analysis outputs
+│   └── task2/               # Task 2 forecasting results
 ├── data/                    # Data storage
 │   ├── raw/                 # Raw data from YFinance
 │   └── processed/           # Cleaned data and returns
@@ -40,7 +48,10 @@ python scripts/main_analysis.py
 # 2. Jupyter notebook
 jupyter notebook notebooks/financial_analysis.ipynb
 
-# 3. Run tests
+# 3. Task 2: Time Series Forecasting
+python scripts/task2_demo.py
+
+# 4. Run tests
 python -m unittest discover tests/ -v
 ```
 
@@ -70,6 +81,13 @@ python -m unittest discover tests/ -v
 - **Detailed Analytics**: Comprehensive risk reports and statistical analysis
 - **Investment Insights**: Data-driven recommendations and portfolio guidance
 - **Export Capabilities**: Multiple formats for downstream analysis
+
+### Time Series Forecasting (Task 2)
+- **ARIMA Models**: Classical statistical forecasting with auto-parameter optimization
+- **LSTM Networks**: Deep learning models for complex pattern recognition
+- **Model Comparison**: Comprehensive evaluation using MAE, RMSE, and MAPE metrics
+- **Hyperparameter Optimization**: Grid search and automated parameter tuning
+- **Chronological Validation**: Proper time series train/test splitting methodology
 
 ### Quality Assurance
 - **Automated Testing**: Comprehensive unit test coverage with edge case validation
